@@ -1,0 +1,1646 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fringe Planner</title>
+<!-- Keep this out of search results. It is a private planner that happens to
+     be publicly reachable, and the listings in it go stale within days. -->
+<meta name="robots" content="noindex, nofollow">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#14487C">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Fringe">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root {
+    --paper:      #F1F2F4;
+    --surface:    #FFFFFF;
+    --surface-2:  #E4E7EB;
+    --ink:        #14181F;
+    --muted:      #5F6773;
+    --line:       #D6DAE0;
+    --accent:     #14487C;
+    --accent-ink: #FFFFFF;
+    --second:     #2C6B45;
+    --warn:       #A8410F;
+    --ctrl-icon:  none;   /* MapLibre's control glyphs are dark artwork */
+
+    --display: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --body: Georgia, "Iowan Old Style", "Palatino Linotype", "Times New Roman", serif;
+    --data: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #0F1218; --surface: #171B21; --surface-2: #21262E;
+      --ink: #E9ECF1; --muted: #929AA6; --line: #2A3038;
+      --accent: #74AAE4; --accent-ink: #0F1218; --second: #6FBF8F;
+      --warn: #F0A06A;
+      --ctrl-icon: invert(1);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #0F1218; --surface: #171B21; --surface-2: #21262E;
+    --ink: #E9ECF1; --muted: #929AA6; --line: #2A3038;
+    --accent: #74AAE4; --accent-ink: #0F1218; --second: #6FBF8F;
+    --warn: #F0A06A;
+    --ctrl-icon: invert(1);
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--paper); color: var(--ink);
+    font-family: var(--body); font-size: 16px; line-height: 1.5;
+    margin: 0; padding: 0 16px calc(84px + env(safe-area-inset-bottom));
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 940px; margin: 0 auto; }
+
+  /* ---- masthead ---- */
+  header.mast { padding: calc(20px + env(safe-area-inset-top)) 0 12px; }
+  .eyebrow {
+    font-family: var(--display); font-size: 10.5px; font-weight: 700;
+    letter-spacing: .15em; text-transform: uppercase; color: var(--muted);
+    margin: 0 0 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--second); flex: none; }
+  .dot.stale { background: #C9821B; }
+  h1 {
+    font-family: var(--display); font-size: clamp(26px, 6vw, 38px);
+    font-weight: 800; letter-spacing: -.028em; line-height: 1; margin: 0;
+  }
+  h1 em { font-style: normal; color: var(--accent); }
+
+  /* ---- view tabs ---- */
+  .views { display: flex; gap: 0; margin: 16px 0 0; border-bottom: 2px solid var(--ink); }
+  .views button {
+    font-family: var(--display); font-size: 13px; font-weight: 700;
+    letter-spacing: .02em; background: none; border: none; color: var(--muted);
+    padding: 9px 15px; cursor: pointer; border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+  }
+  .views button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+
+  /* ---- controls ---- */
+  .controls {
+    position: sticky; top: 0; z-index: 20;
+    background: var(--paper); padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+    display: flex; flex-direction: column; gap: 9px;
+  }
+  .days { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 3px; scrollbar-width: thin; }
+  .days button {
+    font-family: var(--data); font-size: 11.5px; line-height: 1.2;
+    background: var(--surface); color: var(--muted);
+    border: 1px solid var(--line); border-radius: 3px;
+    padding: 5px 8px; cursor: pointer; white-space: nowrap;
+    display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 44px; flex: none;
+  }
+  .days button b { font-size: 15px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .days button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .days button[aria-pressed="true"] b { color: var(--accent-ink); }
+  .days button.today { border-color: var(--second); }
+
+  .quickrow { display: flex; flex-wrap: wrap; gap: 7px 9px; align-items: center; }
+  .filters { display: flex; flex-wrap: wrap; gap: 7px 9px; align-items: center; }
+  /* On a phone the filter bank would fill the screen, so it collapses behind
+     the Filters button and the day strip + offer chips stay permanently visible. */
+  .filters.folded { display: none; }
+  /* The offer chips are an OR group - ticking two widens the list rather than
+     narrowing it - so they get their own labelled row instead of sitting in the
+     quick row next to Shortlist, which ANDs like every other filter. */
+  .offerrow { display: flex; flex-wrap: wrap; gap: 7px 9px; align-items: center; }
+  .offerrow > label {
+    font-family: var(--display); font-size: 10.5px; font-weight: 700;
+    letter-spacing: .12em; text-transform: uppercase; color: var(--muted);
+  }
+  /* min-width: 0 for the same reason as the selects below, one level up: the
+     row is itself a flex item, and its automatic minimum is the widest thing
+     inside it - the venue list in #f-near. Without it the row stays 678px wide
+     however narrow the phone is, and takes the whole page sideways with it. */
+  .nearrow { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; flex: 1 0 100%; min-width: 0; }
+  .nearrow > label {
+    font-family: var(--display); font-size: 10.5px; font-weight: 700;
+    letter-spacing: .12em; text-transform: uppercase; color: var(--muted);
+  }
+  /* Highlight the whole row while it is narrowing results - a radius filter
+     you have forgotten about is a confusing way to lose half the programme. */
+  .nearrow.on {
+    background: color-mix(in srgb, var(--second) 12%, transparent);
+    border-radius: 999px; padding: 5px 11px; margin-left: -11px;
+  }
+  .chip.more::after { content: " ▾"; }
+  .chip.more[aria-expanded="true"]::after { content: " ▴"; }
+  .chip.more.dirty { border-color: var(--accent); color: var(--accent); }
+  /* min-width: 0 matters more than it looks. A flex item defaults to
+     min-width: auto, which for a <select> is the width of its longest option -
+     "Underbelly's Circus Hub on the Meadows" - and that beats max-width, so the
+     venue and Near selects pushed the whole layout wider than the phone. */
+  .filters select, .filters input {
+    font-family: var(--data); font-size: 13px; min-width: 0; max-width: 100%;
+    background: var(--surface); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 3px; padding: 5px 7px;
+    text-overflow: ellipsis;
+  }
+  /* The two selects filled from venue names: long enough to read, capped so
+     they cannot take a row to themselves. */
+  #f-venue, #f-near { flex: 0 1 190px; }
+  .filters input[type="search"] { min-width: 140px; flex: 1 1 160px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+    font-family: var(--display); font-size: 12.5px; font-weight: 600; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 999px; padding: 5px 11px; user-select: none;
+  }
+  .chip input { display: none; }
+  .chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .chip.on.alt { background: var(--second); border-color: var(--second); color: var(--accent-ink); }
+  button.reset {
+    font-family: var(--display); font-size: 12px; font-weight: 600;
+    background: none; border: none; color: var(--accent); cursor: pointer;
+    text-decoration: underline; text-underline-offset: 2px; padding: 0;
+  }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .tally { font-family: var(--data); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  /* ---- listing ---- */
+  .hourmark {
+    font-family: var(--display); font-size: 10px; font-weight: 700;
+    letter-spacing: .14em; text-transform: uppercase; color: var(--muted);
+    padding: 18px 0 5px; border-bottom: 1px solid var(--line);
+  }
+  .perf { border-bottom: 1px solid var(--line); }
+  .perf .row {
+    display: grid; grid-template-columns: 30px 84px 1fr auto; gap: 3px 12px;
+    padding: 10px 0; align-items: baseline; cursor: pointer;
+  }
+  .star {
+    grid-row: 1 / span 2; align-self: center; font-size: 19px; line-height: 1;
+    background: none; border: none; color: var(--line); cursor: pointer; padding: 4px 0;
+    transition: transform .12s ease;
+  }
+  .star.on { color: var(--accent); }
+  .star:active { transform: scale(1.25); }
+  .perf .when { font-family: var(--data); font-variant-numeric: tabular-nums; font-size: 13.5px; font-weight: 600; }
+  .perf .when small { display: block; font-weight: 400; font-size: 11px; color: var(--muted); }
+  .perf .name { font-family: var(--display); font-size: 15.5px; font-weight: 600; line-height: 1.3; }
+  .perf .where { font-size: 13px; color: var(--muted); grid-column: 3; }
+  .perf .tags { grid-column: 4; grid-row: 1 / span 2; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+  .tag {
+    font-family: var(--data); font-size: 10.5px; color: var(--muted);
+    background: var(--surface-2); padding: 2px 6px; border-radius: 3px; white-space: nowrap;
+  }
+  .tag.ltf { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .tag.ltf.gone { background: var(--surface-2); color: var(--muted); text-decoration: line-through; }
+  .tag.offer { background: var(--second); color: var(--accent-ink); font-weight: 600; }
+  .tag.soldout { background: var(--surface-2); color: var(--muted); }
+  .tag.few { background: var(--warn); color: var(--accent-ink); font-weight: 600; }
+  .tag.revd { background: var(--second); color: var(--accent-ink); letter-spacing: -1px; }
+  .tag.trend { background: var(--surface-2); color: var(--accent); font-weight: 600; }
+  .perf.starred { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+
+  /* ---- detail ---- */
+  .detail { padding: 2px 0 16px 42px; font-size: 14.5px; }
+  .detail p { margin: 0 0 10px; max-width: 66ch; }
+  .detail .meta { font-family: var(--data); font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+  .detail .warn { color: var(--warn); font-size: 13px; }
+  .detail .rev { border-left: 2px solid var(--second); padding-left: 10px; margin: 10px 0; }
+  .detail .rev q { display: block; font-style: italic; }
+  .detail .rev cite { display: block; font-style: normal; font-size: 13px; color: var(--muted); margin-top: 3px; }
+  .detail .trend { font-size: 13px; color: var(--accent); }
+  .detail .stale { color: var(--warn); font-size: 12.5px; margin: 8px 0 0; }
+  table.prices { border-collapse: collapse; font-family: var(--data); font-size: 12.5px; margin: 0 0 12px; }
+  table.prices td { padding: 2px 14px 2px 0; }
+  table.prices td.p { text-align: right; font-variant-numeric: tabular-nums; }
+  table.prices tr.free td { color: var(--accent); font-weight: 600; }
+  .book {
+    display: inline-block; font-family: var(--display); font-size: 13px; font-weight: 700;
+    background: var(--accent); color: var(--accent-ink); text-decoration: none;
+    padding: 8px 15px; border-radius: 3px;
+  }
+  .book.off { background: var(--surface-2); color: var(--muted); pointer-events: none; }
+  .nearbtn {
+    font-family: var(--display); font-size: 13px; font-weight: 700;
+    background: var(--surface-2); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 3px; padding: 8px 14px; cursor: pointer; margin-left: 8px;
+  }
+
+  /* ---- map ---- */
+  #map { display: none; }
+  #map.on { display: block; }
+  .mapwrap { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; margin-top: 14px; overflow: hidden; }
+  #mapgl { height: min(64vh, 620px); min-height: 340px; width: 100%; }
+  .mapboot {
+    margin: 0; padding: 140px 16px; text-align: center;
+    color: var(--muted); font-size: 15px;
+  }
+  /* MapLibre's own chrome, pulled into the page's palette - its defaults are
+     white-on-white and look wrong over the dark basemap. These selectors are
+     prefixed with #mapgl deliberately: maplibre-gl.css is injected after this
+     stylesheet, so equal-specificity rules would lose on source order. */
+  #mapgl .maplibregl-ctrl-attrib { font-family: var(--display); font-size: 10px; }
+  #mapgl .maplibregl-ctrl-attrib.maplibregl-compact,
+  #mapgl .maplibregl-ctrl-group { background: var(--surface); }
+  #mapgl .maplibregl-ctrl-attrib,
+  #mapgl .maplibregl-ctrl-attrib a { color: var(--muted); }
+  #mapgl .maplibregl-ctrl-group button + button { border-top-color: var(--line); }
+  #mapgl .maplibregl-ctrl-icon { filter: var(--ctrl-icon); }
+  #mapgl .maplibregl-ctrl-scale {
+    font-family: var(--data); font-size: 10px;
+    background: color-mix(in srgb, var(--surface) 80%, transparent);
+    border-color: var(--muted); color: var(--ink);
+  }
+  .me-dot {
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--second); border: 3px solid var(--surface);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--second) 30%, transparent);
+  }
+  .maptools { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+  .maptools button {
+    font-family: var(--display); font-size: 12.5px; font-weight: 600;
+    background: var(--surface-2); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 999px; padding: 6px 13px; cursor: pointer;
+  }
+  .maptools span { font-family: var(--data); font-size: 11.5px; color: var(--muted); }
+  .maplegend { font-size: 13px; color: var(--muted); padding: 10px 12px; border-top: 1px solid var(--line); }
+  .maplegend b { color: var(--ink); }
+
+  .empty { padding: 44px 0; color: var(--muted); text-align: center; font-size: 16px; }
+  /* The foot of the drawn list: normally a scroll target that fires before you
+     see it, and a working button if IntersectionObserver is missing. */
+  .morerows {
+    display: block; width: 100%; margin: 18px 0; padding: 12px;
+    font-family: var(--display); font-size: 13px; color: var(--muted);
+    background: var(--surface); border: 1px dashed var(--line); border-radius: 6px;
+    cursor: pointer;
+  }
+
+  /* ---- update banner ---- */
+  #banner {
+    position: fixed; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom));
+    z-index: 40; background: var(--ink); color: var(--paper);
+    border-radius: 6px; padding: 11px 14px; display: none;
+    font-family: var(--display); font-size: 13.5px;
+    align-items: center; gap: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.25);
+    max-width: 500px; margin: 0 auto;
+  }
+  #banner.on { display: flex; }
+  #banner button {
+    margin-left: auto; font-family: var(--display); font-size: 13px; font-weight: 700;
+    background: var(--accent); color: var(--accent-ink); border: none;
+    border-radius: 4px; padding: 7px 13px; cursor: pointer; flex: none;
+  }
+
+  footer { margin-top: 40px; padding-top: 18px; border-top: 2px solid var(--ink); font-size: 13.5px; color: var(--muted); }
+  footer p { max-width: 68ch; }
+  #sharepanel {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 5px; padding: 12px; margin: 4px 0 16px; max-width: 560px;
+  }
+  #sharepanel label {
+    display: block; font-family: var(--display); font-size: 10.5px; font-weight: 700;
+    letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px;
+  }
+  #sharebox {
+    width: 100%; font-family: var(--data); font-size: 12px; line-height: 1.45;
+    background: var(--paper); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 3px; padding: 8px; resize: vertical;
+  }
+  .sharerow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 9px; }
+  .sharerow button {
+    font-family: var(--display); font-size: 12.5px; font-weight: 600;
+    background: var(--surface-2); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 999px; padding: 6px 13px; cursor: pointer;
+  }
+  .sharerow button#share-apply { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  #sharenote { font-family: var(--data); font-size: 12px; color: var(--muted); margin: 9px 0 0; min-height: 1em; }
+
+  footer button.link {
+    font-family: var(--display); font-size: 13px; font-weight: 600; background: none;
+    border: none; color: var(--accent); cursor: pointer; text-decoration: underline;
+    text-underline-offset: 2px; padding: 0; margin-right: 14px;
+  }
+
+  /* iOS Safari zooms the whole page in when you focus a form control whose
+     computed font-size is under 16px, and it does not zoom back out. That
+     covers the selects and the picker they open, not just the search box. The
+     alternative - maximum-scale=1 on the viewport meta - would also stop
+     Android pinch-zooming, so bump the controls instead, on touch only. */
+  @media (hover: none) and (pointer: coarse) {
+    .filters select, .filters input, #sharebox { font-size: 16px; }
+  }
+
+  @media (max-width: 620px) {
+    .perf .row { grid-template-columns: 28px 70px 1fr; }
+    .perf .tags { grid-column: 2 / -1; grid-row: auto; flex-direction: row; flex-wrap: wrap; justify-content: flex-start; }
+    .detail { padding-left: 28px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header class="mast">
+  <p class="eyebrow"><span class="dot" id="freshdot"></span><span id="stamp">loading…</span></p>
+  <h1>Fringe <em>Planner</em></h1>
+</header>
+
+<div class="views" role="tablist">
+  <button role="tab" id="tab-list" aria-selected="true">List</button>
+  <button role="tab" id="tab-map" aria-selected="false">Map</button>
+</div>
+
+<div class="controls">
+  <div class="days" id="days" role="group" aria-label="Choose a date"></div>
+  <div class="offerrow" id="offerrow" role="group" aria-label="Offers - any of these">
+    <label id="offerlabel">Offers</label>
+  </div>
+  <div class="quickrow">
+    <label class="chip alt" id="c-star"><input type="checkbox" id="f-star">★ Shortlist</label>
+    <label class="chip" id="c-trend"><input type="checkbox" id="f-trend">Trending</label>
+    <label class="chip" id="c-revd"><input type="checkbox" id="f-revd">★★★★★</label>
+    <button class="chip more" id="more" type="button" aria-expanded="false">Filters</button>
+    <span class="tally" id="tally"></span>
+  </div>
+  <div class="filters" id="filters">
+    <select id="f-genre" aria-label="Genre"><option value="">Any genre</option></select>
+    <select id="f-age" aria-label="Age suitability">
+      <option value="">Any age</option>
+      <option value="3">3+ and under</option>
+      <option value="5">5+ and under</option>
+      <option value="8">8+ and under</option>
+      <option value="12">12+ and under</option>
+      <option value="16">16+ and under</option>
+    </select>
+    <select id="f-venue" aria-label="Venue"><option value="">Any venue</option></select>
+    <select id="f-from" aria-label="From time"></select>
+    <select id="f-until" aria-label="Until time"></select>
+    <input type="search" id="f-text" placeholder="Title, company, venue…" aria-label="Search">
+    <label class="chip" id="c-past"><input type="checkbox" id="f-past">Past shows</label>
+    <button class="reset" id="reset" type="button">Reset</button>
+    <div class="nearrow" id="nearrow">
+      <label for="f-near">Near</label>
+      <select id="f-near" aria-label="Near what"><option value="">anywhere</option></select>
+      <select id="f-radius" aria-label="How near">
+        <option value="250">within 250 m</option>
+        <option value="500" selected>within 500 m</option>
+        <option value="1000">within 1 km</option>
+        <option value="2000">within 2 km</option>
+      </select>
+      <span class="tally" id="nearnote"></span>
+    </div>
+  </div>
+</div>
+
+<div id="listing"></div>
+
+<div id="map">
+  <div class="mapwrap">
+    <div id="mapgl" aria-label="Venue map"><p class="mapboot" id="mapboot">Loading map…</p></div>
+    <div class="maptools">
+      <button id="locate" type="button">Where am I?</button>
+      <button id="mapfit" type="button">Fit all</button>
+      <span id="locnote"></span>
+    </div>
+    <p class="maplegend" id="maplegend"></p>
+  </div>
+</div>
+
+<footer>
+  <p id="foot-count"></p>
+  <p>
+    <button class="link" id="export">Export shortlist</button>
+    <button class="link" id="import">Import shortlist</button>
+    <button class="link" id="refresh">Check for new data</button>
+  </p>
+
+  <!-- An inline panel rather than prompt()/alert(), which iOS ignores in
+       Add-to-Home-Screen standalone mode - this is the only way the two
+       phones can share a shortlist, so it must not depend on those. -->
+  <div id="sharepanel" hidden>
+    <label for="sharebox" id="sharelabel">Shortlist code</label>
+    <textarea id="sharebox" rows="3" spellcheck="false" autocapitalize="off"
+              autocorrect="off" aria-describedby="sharenote"></textarea>
+    <div class="sharerow">
+      <button id="share-copy" type="button">Copy</button>
+      <button id="share-apply" type="button">Add to my shortlist</button>
+      <button id="share-close" type="button">Close</button>
+    </div>
+    <p id="sharenote"></p>
+  </div>
+</footer>
+
+</div>
+
+<div id="banner"><span>New show data is available.</span><button id="banner-go">Update</button></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var VERSION = "2026-08-22T18:01-0770cd8d";
+  var LS_LIST = 'fringe.shortlist';
+  var LS_FILT = 'fringe.filters';
+  var D = null, byId = function (id) { return document.getElementById(id); };
+
+  // ---- shortlist (localStorage, keyed by slug so it survives rebuilds) ----
+  var star = {};
+  try { (JSON.parse(localStorage.getItem(LS_LIST)) || []).forEach(function (s) { star[s] = 1; }); }
+  catch (e) { /* corrupt or unavailable storage - start empty */ }
+
+  function saveStars() {
+    try { localStorage.setItem(LS_LIST, JSON.stringify(Object.keys(star))); }
+    catch (e) { /* private mode / quota - the session still works */ }
+  }
+
+  // ---- filter state ----
+  // `offers` holds the keys of the ticked offer chips and ORs them: empty means
+  // every performance, not none. `past` hides performances that have already
+  // ended; `near`/`radius` are the walking-distance filter, off unless `near`
+  // is set.
+  var F = { day: null, offers: ['ltf'], star: false, trend: false, revd: false,
+            genre: '', age: '', venue: '', from: '', until: '', text: '',
+            past: false, near: '', radius: 500 };
+  var restored = false;
+  try {
+    var saved = JSON.parse(localStorage.getItem(LS_FILT));
+    if (saved) {
+      // Before the offer group there was one Love the Fringe checkbox. Carry a
+      // phone that had it turned off across, rather than springing the filter
+      // back on, then drop the old key so saveFilters stops writing it out.
+      if (!saved.offers && 'ltf' in saved) saved.offers = saved.ltf ? ['ltf'] : [];
+      delete saved.ltf;
+      Object.assign(F, saved);
+      restored = true;
+    }
+  } catch (e) {}
+  if (!Array.isArray(F.offers)) F.offers = [];
+
+  function saveFilters() {
+    // The chosen day is an index into D.days, and that list moves under it:
+    // dropping the Exhibitions took the ten July preview dates with them and
+    // shifted every index by ten. The date is saved alongside the index and
+    // wins on the way back in.
+    F.dayISO = D && F.day !== null ? D.days[F.day] : null;
+    try { localStorage.setItem(LS_FILT, JSON.stringify(F)); } catch (e) {}
+  }
+
+  // ---- helpers ----
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+  function money(n) {
+    return n === 0 ? 'Free' : '£' + (n % 1 ? n.toFixed(2) : n);
+  }
+  function ageNum(a) { var m = /^(\d+)/.exec(a || ''); return m ? +m[1] : null; }
+  function endTime(hhmm, mins) {
+    if (!mins) return '';
+    var p = hhmm.split(':'), t = (+p[0]) * 60 + (+p[1]) + mins;
+    return ('0' + (Math.floor(t / 60) % 24)).slice(-2) + ':' + ('0' + (t % 60)).slice(-2);
+  }
+  var DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  // Today as the phone reckons it. toISOString() would give the UTC date, which
+  // in BST is yesterday's for the first hour after midnight - long enough to
+  // hide a whole day of shows from someone still out.
+  function localToday() { return new Date().toLocaleDateString('en-CA'); }
+
+  // The payload stamp is UTC, but every time in the listings is Europe/London,
+  // so the snapshot is shown that way too. Built from the parsed instant, not
+  // by slicing the string: BST is an hour out and the slicing bug has been
+  // written into this app once already.
+  var londonFmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  });
+
+  function londonStamp(d) {
+    var p = {};
+    londonFmt.formatToParts(d).forEach(function (x) { p[x.type] = x.value; });
+    return p.year + '-' + p.month + '-' + p.day + ' ' + p.hour + ':' + p.minute;
+  }
+
+  function snapshotTaken() {
+    return new Date(Date.parse(D.generated.replace(' ', 'T') + ':00Z'));
+  }
+
+  // Nothing that finished before today is listed at all: the programme carries
+  // a handful of pre-festival preview dates, and once it is running yesterday
+  // is only clutter. "Past shows" therefore means today's finished ones.
+  // Measured on the end time, not the day, so a show that started at 23:30
+  // yesterday and is still running now survives. Out of season - every day in
+  // the payload already gone - the cutoff lifts rather than emptying the app.
+  function dayCutoff() {
+    if (!D.days.length || D.days[D.days.length - 1] < localToday()) return 0;
+    var d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  }
+
+  // When a performance finishes, in local time. The festival is in Edinburgh
+  // and so is the phone, so local time is the right frame; a device left on
+  // another timezone would judge "past" by its own clock.
+  function endsAt(p) {
+    var mins = showOf(p)[S_DUR] || 0;
+    var t = new Date(D.days[p[P_DAY]] + 'T' + p[P_TIME] + ':00').getTime();
+    return t + mins * 60000;
+  }
+
+  // Equirectangular metres. Fine over a couple of kilometres of one city.
+  function metresBetween(a, b) {
+    var dy = (a.lat - b.lat) * 111320;
+    var dx = (a.lon - b.lon) * 111320 * Math.cos((a.lat + b.lat) / 2 * Math.PI / 180);
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  // One point per venue name. The 33 venue names are already geographically
+  // distinct (Underbelly Cowgate and Bristo Square are separate names), so a
+  // venue is a fine anchor and makes a far shorter list than 134 sites.
+  var venuePoint = {};
+  function buildVenuePoints() {
+    var acc = {};
+    D.sites.forEach(function (s) {
+      if (s[2] === null) return;
+      acc[s[0]] = acc[s[0]] || { lat: 0, lon: 0, n: 0 };
+      acc[s[0]].lat += s[2]; acc[s[0]].lon += s[3]; acc[s[0]].n++;
+    });
+    Object.keys(acc).forEach(function (v) {
+      venuePoint[v] = { lat: acc[v].lat / acc[v].n, lon: acc[v].lon / acc[v].n };
+    });
+  }
+
+  // Where the distance filter is measured from, or null if we cannot tell yet
+  // (GPS asked for but not yet granted). Null means "do not filter".
+  function anchorPoint() {
+    if (F.near === 'me') return myPos;
+    if (F.near) return venuePoint[F.near] || null;
+    return null;
+  }
+
+  // ---- data accessors (payload is index-compressed to keep it small) ----
+  // perf = [dayIdx, "HH:MM", showIdx, siteIdx, flags, [[priceTypeIdx, price]], token]
+  var P_DAY = 0, P_TIME = 1, P_SHOW = 2, P_SITE = 3, P_FLAG = 4, P_PRICE = 5, P_TOK = 6;
+  // show = [title, genreIdx, ageIdx, durationMin, description, warnings, company, fringeCode]
+  var S_TITLE = 0, S_GENRE = 1, S_AGE = 2, S_DUR = 3, S_DESC = 4, S_WARN = 5,
+      S_CO = 6, S_CODE = 7, S_TREND = 8, S_STARS = 9, S_REVS = 10;
+  // Fields of one entry in S_REVS.
+  var R_PUB = 0, R_BY = 1, R_QUOTE = 2;
+  // offer = [priceTypeIdx, key, label]
+  var O_IDX = 0, O_KEY = 1, O_LABEL = 2;
+  var F_SALE = 1, F_LTF_AVAIL = 2, F_LTF_BAND = 4, F_LIMITED = 8;
+
+  // The price-type indices behind the ticked chips, resolved once per change
+  // rather than per performance. A key the payload no longer offers - a price
+  // type dropped between builds - is left out rather than filtering on nothing.
+  var offerSel = [];
+
+  function syncOffers() {
+    offerSel = [];
+    D.offers.forEach(function (o) {
+      if (F.offers.indexOf(o[O_KEY]) >= 0) offerSel.push(o[O_IDX]);
+    });
+  }
+
+  function hasOffer(p) {
+    var prices = p[P_PRICE];
+    for (var i = 0; i < prices.length; i++) {
+      if (offerSel.indexOf(prices[i][0]) >= 0) return true;
+    }
+    return false;
+  }
+
+  function priceOf(p, idx) {
+    var prices = p[P_PRICE];
+    for (var i = 0; i < prices.length; i++) {
+      if (prices[i][0] === idx) return prices[i][1];
+    }
+    return null;
+  }
+
+  function showOf(p) { return D.shows[p[P_SHOW]]; }
+  function slugOf(p) { return D.slugs[p[P_SHOW]]; }
+  function siteOf(p) { return D.sites[p[P_SITE]]; }
+  function siteName(s) { return s[1] ? s[0] + ' - ' + s[1] : s[0]; }
+
+  // Map labels have little room, so trim the operator boilerplate.
+  function shortVenue(v) {
+    return v.replace(/^Just The Tonic at (the )?/i, '')
+            .replace(/^Assembly @ /i, 'Assembly ')
+            .replace(/'s Circus Hub on the Meadows/i, ' Circus Hub')
+            .replace(/ \| .*$/, '')
+            .replace(/^Underbelly /i, "U'belly ");
+  }
+
+  // ---- filtering ----
+  var nowMs = Date.now(), cutMs = 0, nearFrom = null;
+
+  function matches(p) {
+    if (F.day !== null && p[P_DAY] !== F.day) return false;
+    if (offerSel.length && !hasOffer(p)) return false;
+    if (endsAt(p) < cutMs) return false;
+    if (!F.past && endsAt(p) < nowMs) return false;
+    if (nearFrom) {
+      var site = siteOf(p);
+      // An unlocated venue cannot be shown to be within range, so it is out.
+      if (site[2] === null) return false;
+      if (metresBetween(nearFrom, { lat: site[2], lon: site[3] }) > F.radius) return false;
+    }
+    var sh = showOf(p);
+    if (F.star && !star[slugOf(p)]) return false;
+    if (F.trend && !sh[S_TREND]) return false;
+    if (F.revd && !sh[S_STARS]) return false;
+    if (F.genre !== '' && sh[S_GENRE] !== +F.genre) return false;
+    if (F.age !== '') {
+      var a = ageNum(D.ages[sh[S_AGE]]);
+      if (a === null || a > +F.age) return false;
+    }
+    if (F.venue !== '' && siteOf(p)[0] !== F.venue) return false;
+    if (F.from && p[P_TIME] < F.from) return false;
+    if (F.until && p[P_TIME] > F.until) return false;
+    if (F.text) {
+      var hay = (sh[S_TITLE] + ' ' + sh[S_CO] + ' ' + siteName(siteOf(p))).toLowerCase();
+      if (hay.indexOf(F.text.toLowerCase()) < 0) return false;
+    }
+    return true;
+  }
+
+  // Both time-dependent state and the anchor are resolved once per pass rather
+  // than per performance - matches() runs ~16,000 times.
+  function filtered() {
+    nowMs = Date.now();
+    cutMs = dayCutoff();
+    nearFrom = anchorPoint();
+    return D.perfs.filter(matches);
+  }
+
+  // ---- rendering: list ----
+  var openKey = null;
+
+  function keyOf(p) { return p[P_DAY] + '|' + p[P_TIME] + '|' + p[P_SHOW]; }
+
+  function priceRows(p) {
+    if (!p[P_PRICE].length) return '';
+    var rows = p[P_PRICE].map(function (pr) {
+      var free = pr[1] === 0;
+      return '<tr' + (free ? ' class="free"' : '') + '><td>' + esc(D.priceTypes[pr[0]]) +
+             '</td><td class="p">' + money(pr[1]) + '</td></tr>';
+    }).join('');
+    return '<table class="prices">' + rows + '</table>';
+  }
+
+  function detailHtml(p) {
+    var sh = showOf(p), site = siteOf(p);
+    var bits = [];
+    if (sh[S_CO]) bits.push(esc(sh[S_CO]));
+    if (sh[S_DUR]) bits.push(sh[S_DUR] + ' min');
+    if (D.ages[sh[S_AGE]]) bits.push(esc(D.ages[sh[S_AGE]]));
+    if (D.genres[sh[S_GENRE]]) bits.push(esc(D.genres[sh[S_GENRE]]));
+    bits.push(esc(siteName(site)));
+
+    var h = '<div class="detail">';
+    h += '<p class="meta">' + bits.join(' &middot; ') + '</p>';
+    if (sh[S_DESC]) h += '<p>' + esc(sh[S_DESC]) + '</p>';
+    if (sh[S_WARN]) h += '<p class="warn">⚠ ' + esc(sh[S_WARN]) + '</p>';
+    // Fringe Biscuit ranks the hundred most talked about shows online, which is
+    // a measure of noise rather than of quality - the reviews below are the
+    // other signal, and only two shows in the programme carry both.
+    if (sh[S_TREND]) {
+      h += '<p class="trend">#' + sh[S_TREND] + ' most talked about this week</p>';
+    }
+    sh[S_REVS].forEach(function (r) {
+      h += '<div class="rev"><q>' + esc(r[R_QUOTE]) + '</q><cite>' +
+           new Array(sh[S_STARS] + 1).join('\u2605') + ' ' +
+           esc([r[R_BY], r[R_PUB]].filter(Boolean).join(', ')) + '</cite></div>';
+    });
+    h += priceRows(p);
+    // Two thirds of the programme is not sold through edfest at all, and a
+    // handful of edfest's own shows have no per-performance link, so the show's
+    // page on edfringe.com is the fallback rather than a dead anchor.
+    var href = p[P_TOK] ? D.bookPrefix + p[P_TOK]
+             : sh[S_CODE] ? D.fringePrefix + sh[S_CODE] : '';
+    var live = (p[P_FLAG] & F_SALE) && href;
+    // edfest reported this one as LimitedAvailability, which is a snapshot of
+    // the stock at fetch time and not a promise: a single ticket has been
+    // refused on a performance still listing itself as available. Say so here,
+    // where the tap happens, rather than only as a tag up in the row.
+    var few = live && (p[P_FLAG] & F_LIMITED);
+    h += '<a class="book' + (live ? '' : ' off') + '" target="_blank" rel="noopener" href="' +
+         (href ? esc(href) : '#') + '">' +
+         (!live ? 'Not on sale' : p[P_TOK] ? 'Book on edfest' : 'Book on edfringe') +
+         (few ? ' - few left' : '') + '</a>';
+    // The point of the distance filter: you have just watched this, what else
+    // is within walking distance of it.
+    if (venuePoint[site[0]]) {
+      h += '<button class="nearbtn" data-near="' + esc(site[0]) + '">What\u2019s near here?</button>';
+    }
+    // After the buttons, not between them - nearbtn sits inline beside .book.
+    if (few) {
+      h += '<p class="stale">edfest showed this as available at ' + esc(D.generated) +
+           ' UTC; it may already be gone.</p>';
+    }
+    h += '</div>';
+    return h;
+  }
+
+  function rowHtml(p) {
+    var sh = showOf(p), site = siteOf(p), slug = slugOf(p), k = keyOf(p);
+    var tags = [];
+    if (p[P_FLAG] & F_LTF_BAND) {
+      var gone = !(p[P_FLAG] & F_LTF_AVAIL);
+      tags.push('<span class="tag ltf' + (gone ? ' gone' : '') + '">' +
+                (gone ? 'LTF gone' : 'LTF free') + '</span>');
+    }
+    // Which of the ticked offers this row actually carries - with an OR group
+    // the reason a row matched is otherwise invisible. Only the ticked ones,
+    // so the default Love the Fringe view looks exactly as it did.
+    D.offers.forEach(function (o) {
+      if (o[O_KEY] === 'ltf' || F.offers.indexOf(o[O_KEY]) < 0) return;
+      if (priceOf(p, o[O_IDX]) === null) return;
+      tags.push('<span class="tag offer">' + esc(o[O_LABEL]) + '</span>');
+    });
+    if (!(p[P_FLAG] & F_SALE)) tags.push('<span class="tag soldout">sold out</span>');
+    else if (p[P_FLAG] & F_LIMITED) tags.push('<span class="tag few">few left</span>');
+    if (sh[S_STARS]) tags.push('<span class="tag revd">' +
+      new Array(sh[S_STARS] + 1).join('\u2605') + '</span>');
+    if (sh[S_TREND]) tags.push('<span class="tag trend">#' + sh[S_TREND] + '</span>');
+    if (D.ages[sh[S_AGE]]) tags.push('<span class="tag">' + esc(D.ages[sh[S_AGE]]) + '</span>');
+
+    var end = endTime(p[P_TIME], sh[S_DUR]);
+    var open = openKey === k;
+
+    return '<div class="perf' + (star[slug] ? ' starred' : '') + '" data-k="' + k + '">' +
+      '<div class="row">' +
+        '<button class="star' + (star[slug] ? ' on' : '') + '" data-slug="' + esc(slug) +
+          '" aria-label="Shortlist ' + esc(sh[S_TITLE]) + '" aria-pressed="' +
+          (star[slug] ? 'true' : 'false') + '">' + (star[slug] ? '★' : '☆') + '</button>' +
+        '<div class="when">' + p[P_TIME] + (end ? '<small>to ' + end + '</small>' : '') + '</div>' +
+        '<div class="name">' + esc(sh[S_TITLE]) + '</div>' +
+        '<div class="tags">' + tags.join('') + '</div>' +
+        '<div class="where">' + esc(siteName(site)) + '</div>' +
+      '</div>' +
+      (open ? detailHtml(p) : '') +
+    '</div>';
+  }
+
+  // The list is not capped, it is drawn a chunk at a time. Every performance
+  // the filters admit is reachable, but "All days" with no offer ticked is tens
+  // of thousands of rows and one innerHTML of that locks a phone up for
+  // seconds. The first chunk lands immediately and the rest follow as the foot
+  // of the drawn list comes into view.
+  var CHUNK = 400;
+  var queue = [], drawn = 0, markDay = null, markHour = null, moreObs = null;
+
+  // The next CHUNK rows as HTML. The day and hour headings carry across calls -
+  // restarting them per chunk would repeat a heading at every boundary.
+  function chunkHtml() {
+    var out = [], i;
+    for (i = drawn; i < queue.length && i < drawn + CHUNK; i++) {
+      var p = queue[i];
+      if (F.day === null && p[P_DAY] !== markDay) {
+        markDay = p[P_DAY]; markHour = null;
+        var d = new Date(D.days[p[P_DAY]] + 'T12:00:00');
+        out.push('<p class="hourmark">' + DOW[d.getDay()] + ' ' + d.getDate() + ' ' +
+                 d.toLocaleString('en-GB', { month: 'long' }) + '</p>');
+      }
+      var hour = p[P_TIME].slice(0, 2);
+      if (hour !== markHour) {
+        markHour = hour;
+        out.push('<p class="hourmark">' + hour + ':00</p>');
+      }
+      out.push(rowHtml(p));
+    }
+    drawn = i;
+    return out.join('');
+  }
+
+  // Watch the foot of the list rather than the scroll position: nothing runs
+  // between chunks, and the margin means the next chunk is usually already
+  // there by the time you reach it. The sentinel is a button as well, so a
+  // browser without IntersectionObserver still gets at the rest of the list.
+  function armMore(el) {
+    if (moreObs) { moreObs.disconnect(); moreObs = null; }
+    if (drawn >= queue.length) return;
+    el.insertAdjacentHTML('beforeend',
+      '<button class="morerows" id="more-rows">Show more (' +
+      (queue.length - drawn).toLocaleString() + ' to go)</button>');
+    var sentinel = byId('more-rows');
+    if (!window.IntersectionObserver) return;
+    moreObs = new IntersectionObserver(function (entries) {
+      if (entries[0].isIntersecting) drawMore();
+    }, { rootMargin: '800px' });
+    moreObs.observe(sentinel);
+  }
+
+  function drawMore() {
+    var el = byId('listing'), sentinel = byId('more-rows');
+    if (moreObs) { moreObs.disconnect(); moreObs = null; }
+    if (sentinel) sentinel.remove();
+    el.insertAdjacentHTML('beforeend', chunkHtml());
+    armMore(el);
+  }
+
+  // `keep` redraws as much of the list as was already drawn - expanding a row
+  // re-renders, and without it you would be thrown back to the first chunk.
+  function renderList(keep) {
+    var want = keep ? Math.max(CHUNK, drawn) : CHUNK;
+    var el = byId('listing');
+    queue = filtered();
+    drawn = 0; markDay = null; markHour = null;
+    if (moreObs) { moreObs.disconnect(); moreObs = null; }
+
+    byId('tally').textContent = queue.length
+      ? queue.length.toLocaleString() + (queue.length === 1 ? ' performance' : ' performances') : '';
+
+    if (!queue.length) {
+      var why = F.near ? 'Nothing within ' +
+                  (F.radius >= 1000 ? (F.radius / 1000) + ' km' : F.radius + ' m') + ' of ' +
+                  (F.near === 'me' ? 'you' : esc(shortVenue(F.near))) +
+                  '. Try a wider radius'
+              : !F.past ? 'Nothing left today. Tick "Past shows" to see what has already been'
+              : F.offers.length ? 'Nothing matches. Try ticking more offers, or none at all'
+              : 'Nothing matches. Try loosening the filters';
+      el.innerHTML = '<p class="empty">' + why + '.</p>';
+      return;
+    }
+
+    var out = [];
+    while (drawn < want && drawn < queue.length) out.push(chunkHtml());
+    el.innerHTML = out.join('');
+    armMore(el);
+  }
+
+  // ---- rendering: map ----
+  // Real OpenStreetMap cartography that works with no signal: Protomaps vector
+  // tiles extracted to the venue bounding box, rendered by MapLibre. Every
+  // asset is served from this origin - nothing is fetched from the network at
+  // view time, which is the whole point.
+  var mapSel = null, myPos = null;
+  var map = null, mapReady = false, mapAssets = null, meMarker = null;
+  var SRC = 'venues', NEAR_SRC = 'nearzone';
+
+  // Exactly the bbox edinburgh.pmtiles was extracted with - see the pmtiles
+  // command in the README. Panning past it would show grey void, so this is
+  // the pan limit. Keep the two in step if the extract is ever redone.
+  var MAP_BOUNDS = [[-3.21381, 55.93870], [-3.16852, 55.97119]];
+
+  function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  function isDark() {
+    var t = document.documentElement.getAttribute('data-theme');
+    if (t) return t === 'dark';
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+
+  function located(i) { return D.sites[i][2] !== null; }
+
+  function venueBounds() {
+    var lats = [], lons = [];
+    D.sites.forEach(function (s) {
+      if (s[2] !== null) { lats.push(s[2]); lons.push(s[3]); }
+    });
+    return [[Math.min.apply(null, lons), Math.min.apply(null, lats)],
+            [Math.max.apply(null, lons), Math.max.apply(null, lats)]];
+  }
+
+  // Bounds of what is actually on screen. Fitting to every venue instead would
+  // frame half of north Edinburgh around a couple of outliers.
+  function filteredBounds(fc) {
+    if (!fc.features.length) return venueBounds();
+    var lons = fc.features.map(function (f) { return f.geometry.coordinates[0]; });
+    var lats = fc.features.map(function (f) { return f.geometry.coordinates[1]; });
+    return [[Math.min.apply(null, lons), Math.min.apply(null, lats)],
+            [Math.max.apply(null, lons), Math.max.apply(null, lats)]];
+  }
+
+  // The circles are just a GeoJSON layer, so refreshing after a filter change
+  // is a setData call rather than a redraw.
+  function venueFC() {
+    var rows = filtered(), counts = {}, starred = {};
+    rows.forEach(function (p) {
+      counts[p[P_SITE]] = (counts[p[P_SITE]] || 0) + 1;
+      if (star[slugOf(p)]) starred[p[P_SITE]] = 1;
+    });
+    var ids = Object.keys(counts).map(Number).filter(located);
+    var maxCount = ids.length ? Math.max.apply(null, ids.map(function (i) { return counts[i]; })) : 1;
+
+    return {
+      type: 'FeatureCollection',
+      matched: rows.length,
+      shown: ids.length,
+      missing: Object.keys(counts).length - ids.length,
+      features: ids.map(function (i) {
+        var s = D.sites[i], r = 9 + 20 * Math.sqrt(counts[i] / maxCount);
+        return {
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [s[3], s[2]] },
+          properties: {
+            site: i, count: counts[i], r: r,
+            starred: starred[i] ? 1 : 0,
+            sel: mapSel === i ? 1 : 0,
+            label: shortVenue(s[0]),
+            offset: [0, r / 11 + 0.5],
+          },
+        };
+      }),
+    };
+  }
+
+  function loadScript(src) {
+    return new Promise(function (res, rej) {
+      var el = document.createElement('script');
+      el.src = src; el.onload = res; el.onerror = function () { rej(new Error(src)); };
+      document.head.appendChild(el);
+    });
+  }
+
+  function loadCss(href) {
+    return new Promise(function (res) {
+      var el = document.createElement('link');
+      el.rel = 'stylesheet'; el.href = href; el.onload = res; el.onerror = res;
+      document.head.appendChild(el);
+    });
+  }
+
+  // MapLibre is a megabyte, so it is only pulled in when the Map tab is first
+  // opened - the list view stays quick to start.
+  function ensureMapAssets() {
+    if (!mapAssets) {
+      mapAssets = loadCss('vendor/maplibre-gl.css')
+        .then(function () { return loadScript('vendor/maplibre-gl.js'); })
+        .then(function () { return loadScript('vendor/pmtiles.js'); });
+    }
+    return mapAssets;
+  }
+
+  function loadStyle() {
+    var theme = isDark() ? 'dark' : 'light';
+    return fetch('vendor/style-' + theme + '.json').then(function (r) { return r.json(); })
+      .then(function (style) {
+        // Glyph and sprite paths must stay absolute with their {braces} intact,
+        // so build them from the page URL rather than letting URL() encode them.
+        var base = location.href.replace(/[?#].*$/, '').replace(/[^/]*$/, '');
+        style.glyphs = base + 'vendor/fonts/{fontstack}/{range}.pbf';
+        style.sprite = base + 'vendor/sprites/' + theme;
+        return style;
+      });
+  }
+
+  function initPmtiles() {
+    return fetch('edinburgh.pmtiles').then(function (r) { return r.arrayBuffer(); })
+      .then(function (buf) {
+        var protocol = new pmtiles.Protocol();
+        maplibregl.addProtocol('pmtiles', protocol.tile);
+        // Whole-file buffer source rather than HTTP Range: Range requests
+        // served through the Cache API are unreliable on iOS Safari, and the
+        // extract is only ~3.7 MB.
+        protocol.add(new pmtiles.PMTiles({
+          getKey: function () { return 'edinburgh'; },
+          getBytes: function (offset, length) {
+            return Promise.resolve({ data: buf.slice(offset, offset + length) });
+          },
+        }));
+      });
+  }
+
+  // The distance filter drawn as a ring, so it is obvious why the map has
+  // suddenly gone quiet.
+  function nearFC() {
+    var a = anchorPoint();
+    if (!a) return { type: 'FeatureCollection', features: [] };
+    var ring = [], steps = 96;
+    var dLat = F.radius / 111320;
+    var dLon = dLat / Math.cos(a.lat * Math.PI / 180);
+    for (var i = 0; i <= steps; i++) {
+      var t = i / steps * 2 * Math.PI;
+      ring.push([a.lon + dLon * Math.cos(t), a.lat + dLat * Math.sin(t)]);
+    }
+    return {
+      type: 'FeatureCollection',
+      features: [{ type: 'Feature', properties: {},
+                   geometry: { type: 'Polygon', coordinates: [ring] } }],
+    };
+  }
+
+  function addVenueLayers() {
+    var accent = cssVar('--accent'), second = cssVar('--second');
+    var ink = cssVar('--ink'), surface = cssVar('--surface');
+
+    if (map.getSource(NEAR_SRC)) map.getSource(NEAR_SRC).setData(nearFC());
+    else map.addSource(NEAR_SRC, { type: 'geojson', data: nearFC() });
+
+    if (!map.getLayer('near-fill')) {
+      map.addLayer({ id: 'near-fill', type: 'fill', source: NEAR_SRC,
+                     paint: { 'fill-color': second, 'fill-opacity': 0.1 } });
+      map.addLayer({ id: 'near-line', type: 'line', source: NEAR_SRC,
+                     paint: { 'line-color': second, 'line-width': 1.5,
+                              'line-dasharray': [3, 2], 'line-opacity': 0.8 } });
+    }
+
+    if (map.getSource(SRC)) map.getSource(SRC).setData(venueFC());
+    else map.addSource(SRC, { type: 'geojson', data: venueFC() });
+
+    if (!map.getLayer('venue-dots')) {
+      map.addLayer({
+        id: 'venue-dots', type: 'circle', source: SRC,
+        paint: {
+          // Shrink the circles as you zoom out, or they swallow the streets.
+          'circle-radius': ['interpolate', ['linear'], ['zoom'],
+                            12, ['*', ['get', 'r'], 0.42],
+                            15, ['get', 'r'],
+                            18, ['*', ['get', 'r'], 1.25]],
+          'circle-color': ['case', ['==', ['get', 'starred'], 1], second, accent],
+          'circle-opacity': 0.8,
+          'circle-stroke-width': ['case', ['==', ['get', 'sel'], 1], 3.5, 1.5],
+          'circle-stroke-color': surface,
+        },
+      });
+      map.addLayer({
+        id: 'venue-count', type: 'symbol', source: SRC,
+        layout: {
+          'text-field': ['to-string', ['get', 'count']],
+          'text-font': ['Noto Sans Medium'],
+          // Track the circles rather than disappearing at low zoom.
+          'text-size': ['interpolate', ['linear'], ['zoom'], 12, 8, 15, 11, 18, 13],
+          'text-allow-overlap': true, 'text-ignore-placement': true,
+        },
+        paint: { 'text-color': '#ffffff' },
+      });
+      // MapLibre does the label collision work the old SVG map did by hand.
+      map.addLayer({
+        id: 'venue-label', type: 'symbol', source: SRC,
+        minzoom: 12.6,   // below this the dots are too crowded to label
+        layout: {
+          'text-field': ['get', 'label'],
+          'text-font': ['Noto Sans Medium'], 'text-size': 11,
+          'text-anchor': 'top', 'text-optional': true,
+          'text-offset': ['array', 'number', 2, ['get', 'offset']],
+        },
+        paint: { 'text-color': ink, 'text-halo-color': surface, 'text-halo-width': 1.7 },
+      });
+    }
+    mapReady = true;
+  }
+
+  function onVenueClick(e) {
+    var f = e.features && e.features[0];
+    if (!f) return;
+    var i = f.properties.site;
+    mapSel = mapSel === i ? null : i;
+    F.venue = mapSel === null ? '' : D.sites[i][0];
+    byId('f-venue').value = F.venue;
+    saveFilters(); syncChips(); refreshVenues();
+  }
+
+  function refreshVenues() {
+    if (map && mapReady && map.getSource(SRC)) {
+      map.getSource(SRC).setData(venueFC());
+      map.getSource(NEAR_SRC).setData(nearFC());
+    }
+    updateLegend();
+  }
+
+  function updateLegend() {
+    var fc = venueFC();
+    var legend = '<b>' + fc.shown + ' venue' + (fc.shown === 1 ? '' : 's') + '</b>, ' +
+      fc.matched.toLocaleString() + ' performance' + (fc.matched === 1 ? '' : 's') +
+      '. Circle size is how many match your filters; teal means something on your ' +
+      'shortlist plays there. Tap a circle to filter the list to that venue.';
+    if (fc.missing) {
+      legend += ' ' + fc.missing + ' venue' + (fc.missing > 1 ? 's have' : ' has') +
+        ' no coordinates.';
+    }
+    if (F.near) {
+      legend += ' Ring shows ' + (F.radius >= 1000 ? (F.radius / 1000) + ' km' : F.radius + ' m') +
+        ' from ' + (F.near === 'me' ? 'you' : esc(shortVenue(F.near))) + '.';
+    }
+    if (mapSel !== null) legend += ' <b>Selected: ' + esc(siteName(D.sites[mapSel])) + '.</b>';
+    byId('maplegend').innerHTML = legend;
+  }
+
+  function mapFailed(err) {
+    var boot = byId('mapboot');
+    if (boot) {
+      boot.textContent = 'The map could not load. Open the app once with a connection ' +
+        'so it can cache the map, then it will work offline.';
+    }
+    console.error('map:', err);
+  }
+
+  var mapBooting = null;
+
+  function initMap() {
+    // `map` is only assigned when the whole async chain finishes, so without
+    // this guard two quick render() calls - now possible via the minute timer
+    // and visibilitychange - would each build a map on the same container.
+    if (mapBooting) return mapBooting;
+    mapBooting = ensureMapAssets()
+      .then(function () { return Promise.all([initPmtiles(), loadStyle()]); })
+      .then(function (out) {
+        map = new maplibregl.Map({
+          container: 'mapgl',
+          style: out[1],
+          // Open on what the current filters actually show, not on everything.
+          bounds: filteredBounds(venueFC()),
+          fitBoundsOptions: { padding: 52, maxZoom: 15.5 },
+          // Keep the reader inside the area the extract actually covers.
+          maxBounds: MAP_BOUNDS,
+          minZoom: 11.5, maxZoom: 18,
+          attributionControl: { compact: true },
+        });
+        map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+        map.addControl(new maplibregl.ScaleControl({ maxWidth: 110, unit: 'metric' }), 'bottom-left');
+
+        map.on('style.load', addVenueLayers);
+        map.on('click', 'venue-dots', onVenueClick);
+        map.on('mouseenter', 'venue-dots', function () { map.getCanvas().style.cursor = 'pointer'; });
+        map.on('mouseleave', 'venue-dots', function () { map.getCanvas().style.cursor = ''; });
+        map.on('error', function (e) { console.warn('map:', e && e.error); });
+
+        var boot = byId('mapboot');
+        if (boot && boot.parentNode) boot.parentNode.removeChild(boot);
+        // Exposed on purpose: lets the browser console (and the test harness)
+        // inspect zoom, layers and loaded tiles on a real device.
+        window.fringeMap = map;
+        return map;
+      })
+      .catch(function (err) {
+        mapBooting = null;   // let a later attempt retry
+        mapFailed(err);
+      });
+    return mapBooting;
+  }
+
+  // Follow the system theme: swapping the style drops the layers, and
+  // 'style.load' puts them back.
+  var darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+  (darkQuery.addEventListener ? darkQuery.addEventListener.bind(darkQuery, 'change')
+    : darkQuery.addListener.bind(darkQuery))(function () {
+    if (!map) return;
+    mapReady = false;
+    loadStyle().then(function (s) { map.setStyle(s); });
+  });
+
+  function renderMap() {
+    updateLegend();
+    if (!map) { initMap(); return; }
+    map.resize();
+    refreshVenues();
+  }
+
+  function render(keep) {
+    if (byId('map').classList.contains('on')) renderMap();
+    else renderList(keep);
+    byId('foot-count').textContent =
+      D.perfs.length.toLocaleString() + ' performances across ' +
+      D.shows.length.toLocaleString() + ' shows and ' + D.sites.length +
+      ' venue spaces. Snapshot taken ' + londonStamp(snapshotTaken()) + ' UK time.';
+  }
+
+  // ---- controls wiring ----
+  function buildControls() {
+    // days
+    var days = byId('days');
+    var today = localToday();
+    // Days already gone get no tile, matching the cutoff in matches(): the
+    // programme starts with a run of preview dates carrying one performance
+    // each, and by mid-festival half the strip would be dates you cannot get
+    // to. Once every day in the payload is past, the strip comes back whole
+    // rather than leaving nothing to press.
+    var live = D.days.length && D.days[D.days.length - 1] >= today;
+    // Take the saved date over the saved index wherever there is one, then
+    // catch every way the index can still be wrong: a day chosen yesterday, and
+    // an index left over from a payload with more days in it, which points at
+    // no day at all and filters the list down to nothing with no visible cause.
+    if (F.dayISO) F.day = D.days.indexOf(F.dayISO);
+    if (F.day !== null && (F.day < 0 || F.day >= D.days.length ||
+                           (live && D.days[F.day] < today))) {
+      F.day = D.days.indexOf(today) >= 0 ? D.days.indexOf(today) : null;
+    }
+    // On a first visit, open on today if the festival is running - that is
+    // what you want standing in the street; afterwards respect the saved day.
+    if (!restored && D.days.indexOf(today) >= 0) F.day = D.days.indexOf(today);
+    var html = ['<button data-day="" aria-pressed="' + (F.day === null) + '"><b>All</b>days</button>'];
+    D.days.forEach(function (iso, i) {
+      if (live && iso < today) return;
+      var d = new Date(iso + 'T12:00:00');
+      html.push('<button class="' + (iso === today ? 'today' : '') + '" data-day="' + i +
+        '" aria-pressed="' + (F.day === i) + '"><b>' + d.getDate() + '</b>' + DOW[d.getDay()] + '</button>');
+    });
+    days.innerHTML = html.join('');
+    days.addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      F.day = b.dataset.day === '' ? null : +b.dataset.day;
+      [].forEach.call(days.children, function (c) {
+        c.setAttribute('aria-pressed', String(c === b));
+      });
+      openKey = null; saveFilters(); render();
+    });
+
+    // offer chips - one per price type the payload nominates, ORed together
+    var offerrow = byId('offerrow');
+    D.offers.forEach(function (o) {
+      offerrow.insertAdjacentHTML('beforeend',
+        '<label class="chip" id="c-offer-' + o[O_KEY] + '"><input type="checkbox" id="f-offer-' +
+        o[O_KEY] + '" data-offer="' + o[O_KEY] + '">' + esc(o[O_LABEL]) + '</label>');
+    });
+    // Bound per input rather than delegated on the row: a change event only
+    // bubbles when the browser raises it, so delegation would leave the chips
+    // dead to anything dispatching one directly, the tests included.
+    D.offers.forEach(function (o) {
+      byId('f-offer-' + o[O_KEY]).addEventListener('change', function () {
+        var at = F.offers.indexOf(o[O_KEY]);
+        if (this.checked) { if (at < 0) F.offers.push(o[O_KEY]); }
+        else if (at >= 0) F.offers.splice(at, 1);
+        syncOffers();
+        openKey = null; syncChips(); saveFilters(); render();
+      });
+    });
+
+    // genre + venue selects
+    var g = byId('f-genre');
+    D.genres.forEach(function (name, i) {
+      g.insertAdjacentHTML('beforeend', '<option value="' + i + '">' + esc(name) + '</option>');
+    });
+    var venues = [];
+    D.sites.forEach(function (s) { if (venues.indexOf(s[0]) < 0) venues.push(s[0]); });
+    venues.sort();
+    var v = byId('f-venue');
+    venues.forEach(function (name) {
+      v.insertAdjacentHTML('beforeend', '<option value="' + esc(name) + '">' + esc(name) + '</option>');
+    });
+
+    // Distance-filter anchor: my location, or any venue.
+    buildVenuePoints();
+    var near = byId('f-near');
+    near.insertAdjacentHTML('beforeend', '<option value="me">my location</option>');
+    venues.forEach(function (name) {
+      if (!venuePoint[name]) return;   // no coordinates, cannot anchor on it
+      near.insertAdjacentHTML('beforeend',
+        '<option value="' + esc(name) + '">' + esc(name) + '</option>');
+    });
+
+    // time selects
+    var from = byId('f-from'), until = byId('f-until');
+    from.insertAdjacentHTML('beforeend', '<option value="">From any time</option>');
+    until.insertAdjacentHTML('beforeend', '<option value="">Until any time</option>');
+    for (var h = 8; h <= 23; h++) {
+      var t = ('0' + h).slice(-2) + ':00';
+      from.insertAdjacentHTML('beforeend', '<option value="' + t + '">from ' + t + '</option>');
+      until.insertAdjacentHTML('beforeend', '<option value="' + t + '">until ' + t + '</option>');
+    }
+
+    // restore persisted values
+    D.offers.forEach(function (o) {
+      byId('f-offer-' + o[O_KEY]).checked = F.offers.indexOf(o[O_KEY]) >= 0;
+    });
+    byId('f-star').checked = F.star;
+    byId('f-trend').checked = F.trend; byId('f-revd').checked = F.revd;
+    g.value = F.genre; v.value = F.venue;
+    byId('f-age').value = F.age; from.value = F.from; until.value = F.until;
+    byId('f-text').value = F.text;
+    byId('f-past').checked = F.past;
+    byId('f-near').value = F.near;
+    byId('f-radius').value = String(F.radius);
+    syncChips();
+
+    // Start folded on a phone unless a hidden filter is already doing work.
+    var narrow = window.matchMedia('(max-width: 620px)').matches;
+    setFolded(narrow && !byId('more').classList.contains('dirty'));
+    byId('more').addEventListener('click', function () {
+      setFolded(!byId('filters').classList.contains('folded'));
+    });
+
+    function bind(id, key, cast) {
+      byId(id).addEventListener('change', function () {
+        F[key] = cast ? cast(this) : this.value;
+        openKey = null; syncChips(); saveFilters(); render();
+      });
+    }
+    bind('f-star', 'star', function (el) { return el.checked; });
+    bind('f-trend', 'trend', function (el) { return el.checked; });
+    bind('f-revd', 'revd', function (el) { return el.checked; });
+    bind('f-genre', 'genre'); bind('f-age', 'age'); bind('f-venue', 'venue');
+    bind('f-from', 'from'); bind('f-until', 'until');
+    bind('f-past', 'past', function (el) { return el.checked; });
+    bind('f-radius', 'radius', function (el) { return +el.value; });
+
+    byId('f-near').addEventListener('change', function () {
+      F.near = this.value;
+      openKey = null;
+      // Choosing "my location" with no fix yet asks for one; until it arrives
+      // the filter stays inert rather than emptying the list.
+      if (F.near === 'me' && !myPos) locate();
+      syncChips(); saveFilters(); render();
+    });
+
+    var tid;
+    byId('f-text').addEventListener('input', function () {
+      var val = this.value;
+      clearTimeout(tid);
+      tid = setTimeout(function () { F.text = val; openKey = null; saveFilters(); render(); }, 160);
+    });
+
+    byId('reset').addEventListener('click', function () {
+      F = { day: F.day, offers: ['ltf'], star: false, trend: false, revd: false,
+            genre: '', age: '', venue: '', from: '', until: '', text: '',
+            past: false, near: '', radius: 500 };
+      mapSel = null; openKey = null;
+      syncOffers();
+      D.offers.forEach(function (o) {
+        byId('f-offer-' + o[O_KEY]).checked = F.offers.indexOf(o[O_KEY]) >= 0;
+      });
+      byId('f-star').checked = false;
+      byId('f-trend').checked = false; byId('f-revd').checked = false;
+      byId('f-genre').value = ''; byId('f-age').value = ''; byId('f-venue').value = '';
+      byId('f-from').value = ''; byId('f-until').value = ''; byId('f-text').value = '';
+      byId('f-past').checked = false; byId('f-near').value = ''; byId('f-radius').value = '500';
+      syncChips(); saveFilters(); render();
+    });
+  }
+
+  function syncChips() {
+    D.offers.forEach(function (o) {
+      byId('c-offer-' + o[O_KEY]).classList.toggle('on', F.offers.indexOf(o[O_KEY]) >= 0);
+    });
+    byId('c-star').classList.toggle('on', F.star);
+    byId('c-trend').classList.toggle('on', F.trend);
+    byId('c-revd').classList.toggle('on', F.revd);
+    byId('c-past').classList.toggle('on', F.past);
+    byId('nearrow').classList.toggle('on', !!F.near);
+    // Flag the collapsed panel when something inside it is narrowing results.
+    var hidden = F.genre || F.age || F.venue || F.from || F.until || F.text
+                 || F.past || F.near;
+    byId('more').classList.toggle('dirty', !!hidden);
+
+    var note = byId('nearnote');
+    if (!F.near) note.textContent = '';
+    else if (F.near === 'me') {
+      note.textContent = myPos ? 'from where you are' : 'waiting for a GPS fix - not filtering yet';
+    } else {
+      note.textContent = 'from ' + shortVenue(F.near);
+    }
+  }
+
+  function setFolded(folded) {
+    byId('filters').classList.toggle('folded', folded);
+    byId('more').setAttribute('aria-expanded', String(!folded));
+  }
+
+  // list interactions: star toggle and expand
+  byId('listing').addEventListener('click', function (e) {
+    if (e.target.closest('.morerows')) { drawMore(); return; }
+    var sBtn = e.target.closest('.star');
+    if (sBtn) {
+      e.stopPropagation();
+      var slug = sBtn.dataset.slug;
+      if (star[slug]) delete star[slug]; else star[slug] = 1;
+      saveStars();
+      render(true);
+      return;
+    }
+    var nearBtn = e.target.closest('.nearbtn');
+    if (nearBtn) {
+      e.stopPropagation();
+      F.near = nearBtn.dataset.near;
+      if (!F.radius) F.radius = 500;
+      byId('f-near').value = F.near;
+      byId('f-radius').value = String(F.radius);
+      openKey = null;
+      setFolded(false);          // show the reader which filter just went on
+      syncChips(); saveFilters(); render();
+      byId('nearrow').scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    var row = e.target.closest('.perf');
+    if (!row) return;
+    openKey = openKey === row.dataset.k ? null : row.dataset.k;
+    renderList(true);
+    if (openKey) {
+      var open = document.querySelector('[data-k="' + CSS.escape(openKey) + '"]');
+      if (open) open.scrollIntoView({ block: 'nearest' });
+    }
+  });
+
+  // Geolocation works from GPS with no data connection, which is exactly the
+  // situation this app is built for: it answers "what is near me right now".
+  // Shared by the map's button and the "near me" distance filter.
+  function locate(then) {
+    var note = byId('locnote');
+    if (!navigator.geolocation) {
+      note.textContent = 'no geolocation on this device';
+      syncChips();
+      return;
+    }
+    note.textContent = 'locating…';
+    navigator.geolocation.getCurrentPosition(function (pos) {
+      myPos = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+
+      var near = null, best = Infinity;
+      D.sites.forEach(function (s, i) {
+        if (s[2] === null) return;
+        var d = metresBetween(myPos, { lat: s[2], lon: s[3] });
+        if (d < best) { best = d; near = i; }
+      });
+      note.textContent = near !== null
+        ? 'nearest: ' + shortVenue(D.sites[near][0]) + ' \u00b7 ' + Math.round(best) + ' m'
+        : 'located';
+
+      if (map) {
+        if (meMarker) meMarker.remove();
+        var dot = document.createElement('div');
+        dot.className = 'me-dot';
+        meMarker = new maplibregl.Marker({ element: dot })
+          .setLngLat([myPos.lon, myPos.lat]).addTo(map);
+      }
+      syncChips();
+      // A fix can turn the distance filter from inert to active.
+      render();
+      if (then) then();
+    }, function (err) {
+      note.textContent = err.code === 1 ? 'location permission denied' : 'could not get a fix';
+      syncChips();
+    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+  }
+
+  byId('locate').addEventListener('click', function () {
+    locate(function () {
+      if (map && myPos) {
+        map.easeTo({ center: [myPos.lon, myPos.lat], zoom: Math.max(map.getZoom(), 15) });
+      }
+    });
+  });
+
+  byId('mapfit').addEventListener('click', function () {
+    if (map) map.fitBounds(venueBounds(), { padding: 44 });
+  });
+
+  // view tabs. Named `onMap`, not `map` - that would shadow the MapLibre
+  // instance this function's render() call depends on.
+  function setView(onMap) {
+    byId('map').classList.toggle('on', onMap);
+    byId('listing').style.display = onMap ? 'none' : '';
+    byId('tab-map').setAttribute('aria-selected', String(onMap));
+    byId('tab-list').setAttribute('aria-selected', String(!onMap));
+    render();
+  }
+  byId('tab-list').addEventListener('click', function () { setView(false); });
+  byId('tab-map').addEventListener('click', function () { setView(true); });
+
+  // ---- shortlist export / import ----
+  // All inline: iOS standalone mode silently ignores prompt() and alert().
+  function openShare(mode) {
+    var panel = byId('sharepanel'), box = byId('sharebox');
+    panel.hidden = false;
+    if (mode === 'export') {
+      var slugs = Object.keys(star);
+      byId('sharelabel').textContent = 'Your shortlist - copy this across';
+      box.value = slugs.join(',');
+      byId('sharenote').textContent = slugs.length
+        ? slugs.length + ' show' + (slugs.length === 1 ? '' : 's') +
+          '. Copy it, then paste it into Import on the other phone.'
+        : 'Your shortlist is empty - star a few shows first.';
+      box.select();
+    } else {
+      byId('sharelabel').textContent = 'Paste a shortlist code';
+      box.value = '';
+      byId('sharenote').textContent = 'Importing merges with what you already have; ' +
+        'nothing is removed.';
+      box.focus();
+    }
+    panel.scrollIntoView({ block: 'nearest' });
+  }
+
+  byId('export').addEventListener('click', function () { openShare('export'); });
+  byId('import').addEventListener('click', function () { openShare('import'); });
+  byId('share-close').addEventListener('click', function () { byId('sharepanel').hidden = true; });
+
+  byId('share-copy').addEventListener('click', function () {
+    var box = byId('sharebox');
+    box.select();
+    var done = function () { byId('sharenote').textContent = 'Copied to the clipboard.'; };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(box.value).then(done, function () {
+        byId('sharenote').textContent = 'Could not copy automatically - select the text and copy it.';
+      });
+    } else {
+      byId('sharenote').textContent = 'Select the text above and copy it.';
+    }
+  });
+
+  byId('share-apply').addEventListener('click', function () {
+    var known = {}, added = 0, unknown = 0;
+    D.slugs.forEach(function (s) { known[s] = 1; });
+    byId('sharebox').value.split(/[,\s]+/).forEach(function (s) {
+      s = s.trim();
+      if (!s) return;
+      if (!known[s]) { unknown++; return; }
+      if (!star[s]) { star[s] = 1; added++; }
+    });
+    saveStars(); render();
+    byId('sharenote').textContent = 'Added ' + added + ' show' + (added === 1 ? '' : 's') +
+      ' to your shortlist.' + (unknown ? ' ' + unknown + ' not recognised.' : '');
+  });
+
+  // ---- data + service worker ----
+  // Age is a count of London calendar days, not of elapsed hours. A snapshot
+  // taken at 18:00 is yesterday's by 10:00 the next morning, and reading it as
+  // "today" because 24 hours haven't passed is exactly the reassurance the
+  // reader shouldn't be given.
+  function stampFreshness() {
+    var taken = londonStamp(snapshotTaken());
+    var age = Math.round((Date.parse(londonStamp(new Date()).slice(0, 10) + 'T00:00:00Z')
+      - Date.parse(taken.slice(0, 10) + 'T00:00:00Z')) / 864e5);
+    byId('freshdot').classList.toggle('stale', age > 2);
+    byId('stamp').textContent = 'Snapshot ' + taken + (age < 1 ? ' · today'
+      : ' · ' + age + ' day' + (age === 1 ? '' : 's') + ' old');
+  }
+
+  // An app left open all afternoon would otherwise keep offering shows that
+  // finished hours ago. Only re-render when hiding past shows could change
+  // something, and never while a row is expanded under the reader's finger.
+  setInterval(function () {
+    if (!D || F.past || openKey) return;
+    if (document.hidden) return;
+    if (F.day !== null && D.days[F.day] !== localToday()) return;
+    render(true);
+  }, 60000);
+
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden && D && !F.past) render(true);
+  });
+
+  fetch('data.json').then(function (r) { return r.json(); }).then(function (json) {
+    D = json;
+    stampFreshness();
+    syncOffers();
+    buildControls();
+    render();
+  }).catch(function (err) {
+    byId('listing').innerHTML = '<p class="empty">Could not load the show data. ' +
+      'If this is the first run, open the app once with a connection so it can cache itself.</p>';
+    byId('stamp').textContent = 'no data';
+    console.error(err);
+  });
+
+  byId('refresh').addEventListener('click', function () {
+    if (!navigator.serviceWorker || !navigator.serviceWorker.controller) {
+      location.reload(); return;
+    }
+    byId('refresh').textContent = 'Checking…';
+    navigator.serviceWorker.getRegistration().then(function (reg) {
+      return reg ? reg.update() : null;
+    }).then(function () {
+      // If there is new data, updatefound fires and the banner appears; the
+      // controllerchange handler does the reload once it has taken over.
+      setTimeout(function () {
+        byId('refresh').textContent = byId('banner').classList.contains('on')
+          ? 'Update ready below' : 'Already up to date';
+      }, 1500);
+    }).catch(function () {
+      byId('refresh').textContent = 'No connection';
+    });
+  });
+
+  if ('serviceWorker' in navigator) {
+    // Reload only once the new worker has actually taken over. Reloading
+    // straight after postMessage races the activation, and the old worker
+    // just serves the old cache again - the Update button looks broken.
+    var reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (reloading) return;
+      reloading = true;
+      location.reload();
+    });
+
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').then(function (reg) {
+        reg.addEventListener('updatefound', function () {
+          var nw = reg.installing;
+          if (!nw) return;
+          nw.addEventListener('statechange', function () {
+            if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+              byId('banner').classList.add('on');
+              byId('banner-go').onclick = function () {
+                byId('banner').classList.remove('on');
+                nw.postMessage('skipWaiting');
+              };
+            }
+          });
+        });
+      }).catch(function (e) {
+        // file:// or plain http - the app still works, it just will not cache.
+        console.warn('service worker not registered:', e);
+      });
+    });
+  }
+})();
+</script>
+</body>
+</html>
